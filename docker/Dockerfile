@@ -1,55 +1,57 @@
-##
-# Image for the Cesium Terrain Server
-#
+# --- Stage 1: Build the Cesium Terrain Server --- 
+FROM golang:1.20-bullseye AS builder
 
-# Ubuntu 14.04 Trusty Tahr
-FROM phusion/baseimage:0.9.15
+# Install additional tools needed
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git mercurial unzip wget ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
 
-# Set correct environment variables.
-ENV HOME /root
+WORKDIR /app
 
-# Regenerate SSH host keys. baseimage-docker does not contain any, so you
-# have to do that yourself. You may also comment out this instruction; the
-# init system will auto-generate one during boot.
-RUN /etc/my_init.d/00_regen_ssh_host_keys.sh
+# Copy source code into the build context
+COPY . /app
 
-# Update the location of the apt sources
-RUN apt-get update -y
+# Disable Go modules to use GOPATH mode for this legacy project
+ENV GO111MODULE=off
 
-# Install dependencies
-RUN apt-get install -y \
-    wget \
-    build-essential \
-    git \
-    mercurial \
-    rsync \
-    unzip
+# Set up GOPATH workspace for the project
+ENV GOPATH=/app/go
+RUN mkdir -p "$GOPATH/src/github.com/geo-data" && \
+    ln -s /app "$GOPATH/src/github.com/geo-data/cesium-terrain-server"
 
-# Install Go
-ADD install-go.sh /tmp/
-RUN /tmp/install-go.sh
+WORKDIR "$GOPATH/src/github.com/geo-data/cesium-terrain-server"
 
-# Set the Go workspace
-ENV GOPATH=/usr/local/go/_vendor:/usr/local/go GOBIN=/usr/local/bin
+# Fetch Go dependencies and build the server
+RUN go get -d -v ./... && \
+    go build -v -o /app/bin/cesium-terrain-server ./cmd/cesium-terrain-server
 
-# Install the terrain server
-ADD local/ /tmp/local/
-ADD cts-checkout.txt install-terrain-server.sh /tmp/
-RUN /tmp/install-terrain-server.sh
+# Download Cesium.js assets
+ARG CESIUM_VERSION=1.4
+RUN wget -q -O /tmp/cesium.zip "https://cesium.com/downloads/CesiumJS/Cesium-${CESIUM_VERSION}.zip" && \
+    unzip -q /tmp/cesium.zip -d /app/cesium && \
+    rm -f /tmp/cesium.zip
 
-# Install Cesium.js
-ADD cesium-version.txt install-cesiumjs.sh /tmp/
-RUN /tmp/install-cesiumjs.sh
+# --- Stage 2: Create the final runtime image ---
+FROM ubuntu:22.04
 
-# Add our filesystem updates
-ADD ./root-fs /tmp/root-fs
-RUN rsync -a /tmp/root-fs/ /
+# Set locale to UTF-8
+ENV LANG=C.UTF-8
 
-# Expose the terrain server
+# Create a user for security
+RUN useradd -m -d /home/cesium cesium
+
+# Create necessary directories
+RUN mkdir -p /data/tilesets/terrain /data/cesium && chown -R cesium /data
+
+# Copy the compiled server binary and Cesium assets from builder
+COPY --from=builder /app/bin/cesium-terrain-server /usr/local/bin/cesium-terrain-server
+COPY --from=builder /app/cesium /data/cesium
+
+# Switch to non-root user
+USER cesium
+
+# Expose the server port
 EXPOSE 8000
 
-# Clean up APT when done
-RUN apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
-
-# Use baseimage-docker's init system.
-CMD ["/sbin/my_init"]
+# Set the entrypoint to the server binary
+ENTRYPOINT ["/usr/local/bin/cesium-terrain-server"]
