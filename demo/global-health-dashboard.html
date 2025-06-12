@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Global Health & BIM Dashboard - Cesium Demo</title>
+    
+    <!-- Cesium -->
+    <script src="https://cesium.com/downloads/cesiumjs/releases/1.95/Build/Cesium/Cesium.js"></script>
+    <link href="https://cesium.com/downloads/cesiumjs/releases/1.95/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+    
+    <style>
+        html, body, #cesiumContainer {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+        
+        /* Custom info panel */
+        .info-panel {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(42, 42, 42, 0.9);
+            color: white;
+            padding: 15px;
+            border-radius: 5px;
+            max-width: 400px;
+            z-index: 100;
+        }
+        
+        .info-panel h1 {
+            margin: 0 0 10px 0;
+            font-size: 20px;
+        }
+        
+        .info-panel h2 {
+            margin: 15px 0 5px 0;
+            font-size: 16px;
+            color: #48b;
+        }
+        
+        .info-panel ul {
+            margin: 5px 0;
+            padding-left: 20px;
+        }
+        
+        .controls {
+            margin-top: 15px;
+        }
+        
+        .controls button {
+            background: #48b;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            margin: 2px;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        
+        .controls button:hover {
+            background: #5ac;
+        }
+        
+        .legend {
+            position: absolute;
+            bottom: 30px;
+            right: 10px;
+            background: rgba(42, 42, 42, 0.9);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 100;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 5px 0;
+        }
+        
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            margin-right: 10px;
+            border: 1px solid #fff;
+        }
+    </style>
+</head>
+<body>
+    <div id="cesiumContainer"></div>
+    
+    <div class="info-panel">
+        <h1>Global Health & BIM Dashboard</h1>
+        <p>Google Earth-style visualization using Cesium.js and your local terrain server</p>
+        
+        <h2>Data Layers:</h2>
+        <ul>
+            <li>Terrain elevation (from your server)</li>
+            <li>Health monitoring points</li>
+            <li>Infrastructure/BIM models</li>
+            <li>Environmental hazards</li>
+        </ul>
+        
+        <div class="controls">
+            <button onclick="addHealthData()">Show Health Data</button>
+            <button onclick="addBIMModel()">Add BIM Model</button>
+            <button onclick="addEnvironmentalData()">Show Environmental</button>
+            <button onclick="clearAll()">Clear All</button>
+            <button onclick="flyToLocation()">Fly to NYC</button>
+        </div>
+    </div>
+    
+    <div class="legend" id="legend" style="display: none;">
+        <h3 style="margin: 0 0 10px 0;">Legend</h3>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #ff0000;"></div>
+            <span>High Risk Health Zone</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #ffff00;"></div>
+            <span>Medium Risk Zone</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #00ff00;"></div>
+            <span>Low Risk Zone</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #0080ff;"></div>
+            <span>Infrastructure/BIM</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #ff8000;"></div>
+            <span>Environmental Hazard</span>
+        </div>
+    </div>
+    
+    <script>
+        // Initialize Cesium viewer with your local terrain server
+        const viewer = new Cesium.Viewer('cesiumContainer', {
+            terrainProvider: new Cesium.CesiumTerrainProvider({
+                url: 'http://localhost:8082/tilesets/sample/',
+                requestVertexNormals: true
+            }),
+            // Use Bing Maps for imagery (requires API key for production)
+            imageryProvider: new Cesium.BingMapsImageryProvider({
+                url: 'https://dev.virtualearth.net',
+                key: 'YOUR_BING_MAPS_KEY', // Get free key from Microsoft
+                mapStyle: Cesium.BingMapsStyle.AERIAL_WITH_LABELS
+            }),
+            baseLayerPicker: true,
+            geocoder: true,
+            homeButton: true,
+            sceneModePicker: true,
+            navigationHelpButton: true,
+            animation: true,
+            timeline: true,
+            fullscreenButton: true,
+            vrButton: false
+        });
+        
+        // Set initial view
+        viewer.scene.camera.setView({
+            destination: Cesium.Cartesian3.fromDegrees(-74.0, 40.7, 15000000), // NYC area, high altitude
+            orientation: {
+                heading: Cesium.Math.toRadians(0),
+                pitch: Cesium.Math.toRadians(-90),
+                roll: 0.0
+            }
+        });
+        
+        // Enable lighting based on sun position
+        viewer.scene.globe.enableLighting = true;
+        
+        // Data collections
+        let healthEntities = [];
+        let bimEntities = [];
+        let environmentalEntities = [];
+        
+        // Add health monitoring data points
+        function addHealthData() {
+            clearHealthData();
+            
+            // Example health monitoring locations with data
+            const healthLocations = [
+                { lon: -74.0060, lat: 40.7128, cases: 1250, risk: 'high', name: 'New York City' },
+                { lon: -118.2437, lat: 34.0522, cases: 890, risk: 'high', name: 'Los Angeles' },
+                { lon: -87.6298, lat: 41.8781, cases: 650, risk: 'medium', name: 'Chicago' },
+                { lon: -95.3698, lat: 29.7604, cases: 450, risk: 'medium', name: 'Houston' },
+                { lon: -112.0740, lat: 33.4484, cases: 320, risk: 'low', name: 'Phoenix' },
+                { lon: -75.1652, lat: 39.9526, cases: 280, risk: 'low', name: 'Philadelphia' }
+            ];
+            
+            healthLocations.forEach(location => {
+                const color = location.risk === 'high' ? Cesium.Color.RED :
+                             location.risk === 'medium' ? Cesium.Color.YELLOW :
+                             Cesium.Color.GREEN;
+                
+                const entity = viewer.entities.add({
+                    position: Cesium.Cartesian3.fromDegrees(location.lon, location.lat, 100),
+                    point: {
+                        pixelSize: 15,
+                        color: color.withAlpha(0.8),
+                        outlineColor: Cesium.Color.WHITE,
+                        outlineWidth: 2,
+                        heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
+                        scaleByDistance: new Cesium.NearFarScalar(1.5e2, 2.0, 1.5e7, 0.5)
+                    },
+                    label: {
+                        text: location.name,
+                        font: '14pt sans-serif',
+                        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                        outlineWidth: 2,
+                        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+                        pixelOffset: new Cesium.Cartesian2(0, -20),
+                        heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND
+                    },
+                    description: `
+                        <h3>${location.name}</h3>
+                        <p><strong>Active Cases:</strong> ${location.cases}</p>
+                        <p><strong>Risk Level:</strong> ${location.risk.toUpperCase()}</p>
+                        <p><strong>Coordinates:</strong> ${location.lat.toFixed(4)}, ${location.lon.toFixed(4)}</p>
+                    `
+                });
+                
+                healthEntities.push(entity);
+            });
+            
+            document.getElementById('legend').style.display = 'block';
+        }
+        
+        // Add BIM/Infrastructure model
+        function addBIMModel() {
+            clearBIMData();
+            
+            // Example: Add a 3D building model (box for demo)
+            const buildingHeight = 300;
+            const entity = viewer.entities.add({
+                name: 'Sample Building',
+                position: Cesium.Cartesian3.fromDegrees(-74.0134, 40.7127),
+                box: {
+                    dimensions: new Cesium.Cartesian3(100.0, 100.0, buildingHeight),
+                    material: Cesium.Color.SKYBLUE.withAlpha(0.8),
+                    outline: true,
+                    outlineColor: Cesium.Color.BLACK
+                },
+                description: `
+                    <h3>Sample BIM Model</h3>
+                    <p><strong>Type:</strong> Commercial Building</p>
+                    <p><strong>Height:</strong> ${buildingHeight}m</p>
+                    <p><strong>Status:</strong> Operational</p>
+                    <p><strong>Occupancy:</strong> 2,500 people</p>
+                `
+            });
+            
+            bimEntities.push(entity);
+            
+            // In real implementation, load actual glTF/3D Tiles models:
+            // const entity = viewer.entities.add({
+            //     position: Cesium.Cartesian3.fromDegrees(-74.0134, 40.7127),
+            //     model: {
+            //         uri: '/models/building.glb',
+            //         scale: 1.0
+            //     }
+            // });
+        }
+        
+        // Add environmental hazard data
+        function addEnvironmentalData() {
+            clearEnvironmentalData();
+            
+            // Example: Flood zone polygon
+            const floodZone = viewer.entities.add({
+                name: 'Flood Risk Zone',
+                polygon: {
+                    hierarchy: Cesium.Cartesian3.fromDegreesArray([
+                        -74.02, 40.70,
+                        -74.02, 40.72,
+                        -74.00, 40.72,
+                        -74.00, 40.70
+                    ]),
+                    height: 0,
+                    material: Cesium.Color.ORANGE.withAlpha(0.4),
+                    outline: true,
+                    outlineColor: Cesium.Color.ORANGE
+                },
+                description: `
+                    <h3>Flood Risk Zone</h3>
+                    <p><strong>Risk Level:</strong> High</p>
+                    <p><strong>Sea Level Rise:</strong> +2.5m projected by 2050</p>
+                `
+            });
+            
+            // Example: Seismic activity point
+            const seismicPoint = viewer.entities.add({
+                position: Cesium.Cartesian3.fromDegrees(-118.2437, 34.0522),
+                point: {
+                    pixelSize: 20,
+                    color: Cesium.Color.ORANGE,
+                    outlineColor: Cesium.Color.RED,
+                    outlineWidth: 3
+                },
+                label: {
+                    text: 'Seismic Activity',
+                    font: '14pt sans-serif',
+                    style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                    outlineWidth: 2,
+                    verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+                    pixelOffset: new Cesium.Cartesian2(0, -25)
+                },
+                description: `
+                    <h3>Recent Seismic Activity</h3>
+                    <p><strong>Magnitude:</strong> 4.2</p>
+                    <p><strong>Depth:</strong> 10km</p>
+                    <p><strong>Time:</strong> 2 hours ago</p>
+                `
+            });
+            
+            environmentalEntities.push(floodZone);
+            environmentalEntities.push(seismicPoint);
+        }
+        
+        // Clear functions
+        function clearHealthData() {
+            healthEntities.forEach(entity => viewer.entities.remove(entity));
+            healthEntities = [];
+        }
+        
+        function clearBIMData() {
+            bimEntities.forEach(entity => viewer.entities.remove(entity));
+            bimEntities = [];
+        }
+        
+        function clearEnvironmentalData() {
+            environmentalEntities.forEach(entity => viewer.entities.remove(entity));
+            environmentalEntities = [];
+        }
+        
+        function clearAll() {
+            clearHealthData();
+            clearBIMData();
+            clearEnvironmentalData();
+            document.getElementById('legend').style.display = 'none';
+        }
+        
+        // Fly to location
+        function flyToLocation() {
+            viewer.camera.flyTo({
+                destination: Cesium.Cartesian3.fromDegrees(-74.0060, 40.7128, 5000),
+                orientation: {
+                    heading: Cesium.Math.toRadians(0),
+                    pitch: Cesium.Math.toRadians(-45),
+                    roll: 0.0
+                },
+                duration: 3
+            });
+        }
+        
+        // Handle terrain provider errors
+        viewer.terrainProvider.errorEvent.addEventListener(function(error) {
+            console.log('Terrain error:', error);
+            // Fall back to simple terrain if your server isn't available
+            viewer.terrainProvider = new Cesium.EllipsoidTerrainProvider();
+        });
+        
+        // Add some initial data
+        setTimeout(() => {
+            addHealthData();
+        }, 2000);
+    </script>
+</body>
+</html>
