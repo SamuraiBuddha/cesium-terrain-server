@@ -72,5 +72,5 @@ EXPOSE 8000
 # Set the entrypoint to the server binary
 ENTRYPOINT ["/usr/local/bin/cesium-terrain-server"]
 
-# Default command arguments
-CMD ["-dir", "/data/tilesets/terrain", "-port", "8000"]
+# Default command arguments matching the original configuration
+CMD ["-dir", "/data/tilesets/terrain", "-port", "8000", "-base-terrain-url", "/tilesets"]
