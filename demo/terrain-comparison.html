@@ -143,7 +143,7 @@
                    id="cesiumToken" 
                    class="token-input" 
                    placeholder="Your Cesium Ion token"
-                   value="">
+                   value="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI2OTM4ZGQxYS03YTVmLTQ1ZjItYWZlOC01OTYxNWNkZTgyY2UiLCJpZCI6MzExNzI3LCJpYXQiOjE3NDk3NTkwOTN9.-WkkoBJwPqVRGSi8qQbbV6dUGKAl9ZzFhdhq24cxa7U">
             <small style="color: #888;">Get free token at cesium.com/ion</small>
         </div>
         
@@ -163,10 +163,17 @@
     <script>
         // Set Cesium Ion token if available
         const tokenInput = document.getElementById('cesiumToken');
+        const DEFAULT_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI2OTM4ZGQxYS03YTVmLTQ1ZjItYWZlOC01OTYxNWNkZTgyY2UiLCJpZCI6MzExNzI3LCJpYXQiOjE3NDk3NTkwOTN9.-WkkoBJwPqVRGSi8qQbbV6dUGKAl9ZzFhdhq24cxa7U';
         const savedToken = localStorage.getItem('cesiumIonToken');
+
         if (savedToken) {
             tokenInput.value = savedToken;
             Cesium.Ion.defaultAccessToken = savedToken;
+        } else {
+        // Use default token if none saved
+            tokenInput.value = DEFAULT_TOKEN;
+            Cesium.Ion.defaultAccessToken = DEFAULT_TOKEN;
+            localStorage.setItem('cesiumIonToken', DEFAULT_TOKEN);
         }
         
         // Update token when changed
