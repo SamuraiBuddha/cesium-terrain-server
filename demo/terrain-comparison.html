@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cesium Terrain Comparison Demo</title>
+    
+    <!-- Cesium -->
+    <script src="https://cesium.com/downloads/cesiumjs/releases/1.95/Build/Cesium/Cesium.js"></script>
+    <link href="https://cesium.com/downloads/cesiumjs/releases/1.95/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+    
+    <style>
+        html, body, #cesiumContainer {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+        
+        .control-panel {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(42, 42, 42, 0.95);
+            color: white;
+            padding: 20px;
+            border-radius: 5px;
+            max-width: 350px;
+            z-index: 100;
+        }
+        
+        .control-panel h3 {
+            margin: 0 0 15px 0;
+            color: #48b;
+        }
+        
+        .terrain-option {
+            margin: 10px 0;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        .terrain-option:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        
+        .terrain-option.active {
+            background: rgba(72, 136, 187, 0.5);
+            border: 1px solid #48b;
+        }
+        
+        .terrain-option h4 {
+            margin: 0 0 5px 0;
+            color: white;
+        }
+        
+        .terrain-option p {
+            margin: 0;
+            font-size: 12px;
+            color: #ccc;
+        }
+        
+        .token-input {
+            width: 100%;
+            padding: 8px;
+            margin: 10px 0;
+            background: #333;
+            border: 1px solid #555;
+            color: white;
+            border-radius: 3px;
+        }
+        
+        .demo-locations {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #555;
+        }
+        
+        button {
+            background: #48b;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            margin: 5px 5px 5px 0;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        
+        button:hover {
+            background: #5ac;
+        }
+        
+        .status {
+            margin-top: 10px;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 3px;
+            font-size: 12px;
+        }
+        
+        .status.error {
+            background: rgba(255, 0, 0, 0.3);
+            border: 1px solid #f66;
+        }
+        
+        .status.success {
+            background: rgba(0, 255, 0, 0.3);
+            border: 1px solid #6f6;
+        }
+    </style>
+</head>
+<body>
+    <div id="cesiumContainer"></div>
+    
+    <div class="control-panel">
+        <h3>Terrain Provider Comparison</h3>
+        
+        <div class="terrain-option" id="local-terrain" onclick="setTerrain('local')">
+            <h4>🖥️ Local Terrain Server</h4>
+            <p>Your terrain server running on port 8082</p>
+            <p>Status: <span id="local-status">Checking...</span></p>
+        </div>
+        
+        <div class="terrain-option active" id="cesium-terrain" onclick="setTerrain('cesium')">
+            <h4>🌍 Cesium World Terrain</h4>
+            <p>High-resolution global terrain from Cesium Ion</p>
+            <p>~30m resolution globally, ~1m in some areas</p>
+        </div>
+        
+        <div class="terrain-option" id="ellipsoid-terrain" onclick="setTerrain('none')">
+            <h4>🔵 No Terrain (Ellipsoid)</h4>
+            <p>Smooth globe without elevation data</p>
+        </div>
+        
+        <div style="margin: 20px 0;">
+            <label>Cesium Ion Token (optional):</label>
+            <input type="text" 
+                   id="cesiumToken" 
+                   class="token-input" 
+                   placeholder="Your Cesium Ion token"
+                   value="">
+            <small style="color: #888;">Get free token at cesium.com/ion</small>
+        </div>
+        
+        <div class="demo-locations">
+            <h4>Test Locations:</h4>
+            <button onclick="flyTo(-105.2928, 40.0150, 10000, 'Boulder, CO')">🏔️ Rocky Mountains</button>
+            <button onclick="flyTo(86.9250, 27.9881, 25000, 'Mt. Everest')">🏔️ Mt. Everest</button>
+            <button onclick="flyTo(-112.1130, 36.1069, 15000, 'Grand Canyon')">🏜️ Grand Canyon</button>
+            <button onclick="flyTo(138.7274, 35.3606, 8000, 'Mt. Fuji')">🗻 Mt. Fuji</button>
+            <button onclick="flyTo(6.8652, 45.8326, 15000, 'Alps')">🏔️ Swiss Alps</button>
+            <button onclick="flyTo(-74.0060, 40.7128, 5000, 'NYC')">🏙️ New York City</button>
+        </div>
+        
+        <div id="status" class="status"></div>
+    </div>
+    
+    <script>
+        // Set Cesium Ion token if available
+        const tokenInput = document.getElementById('cesiumToken');
+        const savedToken = localStorage.getItem('cesiumIonToken');
+        if (savedToken) {
+            tokenInput.value = savedToken;
+            Cesium.Ion.defaultAccessToken = savedToken;
+        }
+        
+        // Update token when changed
+        tokenInput.addEventListener('change', (e) => {
+            const token = e.target.value;
+            if (token) {
+                Cesium.Ion.defaultAccessToken = token;
+                localStorage.setItem('cesiumIonToken', token);
+                updateStatus('Cesium Ion token updated', 'success');
+                // Refresh terrain if using Cesium
+                if (currentTerrain === 'cesium') {
+                    setTerrain('cesium');
+                }
+            }
+        });
+        
+        // Initialize viewer
+        const viewer = new Cesium.Viewer('cesiumContainer', {
+            terrainProvider: new Cesium.CesiumTerrainProvider({
+                url: Cesium.IonResource.fromAssetId(1),
+                requestVertexNormals: true
+            }),
+            baseLayerPicker: true,
+            geocoder: true,
+            homeButton: true,
+            sceneModePicker: true,
+            navigationHelpButton: true,
+            animation: false,
+            timeline: false
+        });
+        
+        // Enable terrain lighting
+        viewer.scene.globe.enableLighting = true;
+        viewer.scene.globe.depthTestAgainstTerrain = true;
+        
+        let currentTerrain = 'cesium';
+        
+        // Terrain providers
+        const terrainProviders = {
+            local: {
+                name: 'Local Terrain Server',
+                create: () => {
+                    return new Cesium.CesiumTerrainProvider({
+                        url: 'http://localhost:8082/tilesets/sample/',
+                        requestVertexNormals: true
+                    });
+                }
+            },
+            cesium: {
+                name: 'Cesium World Terrain',
+                create: () => {
+                    return new Cesium.CesiumTerrainProvider({
+                        url: Cesium.IonResource.fromAssetId(1),
+                        requestVertexNormals: true,
+                        requestWaterMask: true
+                    });
+                }
+            },
+            none: {
+                name: 'No Terrain',
+                create: () => new Cesium.EllipsoidTerrainProvider()
+            }
+        };
+        
+        // Set terrain provider
+        function setTerrain(type) {
+            currentTerrain = type;
+            
+            // Update UI
+            document.querySelectorAll('.terrain-option').forEach(el => {
+                el.classList.remove('active');
+            });
+            document.getElementById(`${type === 'none' ? 'ellipsoid' : type}-terrain`).classList.add('active');
+            
+            try {
+                const provider = terrainProviders[type].create();
+                viewer.terrainProvider = provider;
+                
+                // Add error handler
+                if (type === 'local') {
+                    provider.errorEvent.addEventListener((error) => {
+                        console.error('Local terrain error:', error);
+                        updateStatus('Local terrain server not accessible. Is it running?', 'error');
+                        document.getElementById('local-status').textContent = 'Not available';
+                        document.getElementById('local-status').style.color = '#f66';
+                    });
+                    
+                    // Test local server
+                    fetch('http://localhost:8082/tilesets/')
+                        .then(response => {
+                            if (response.ok) {
+                                document.getElementById('local-status').textContent = 'Connected';
+                                document.getElementById('local-status').style.color = '#6f6';
+                                updateStatus('Connected to local terrain server', 'success');
+                            }
+                        })
+                        .catch(error => {
+                            document.getElementById('local-status').textContent = 'Not available';
+                            document.getElementById('local-status').style.color = '#f66';
+                        });
+                }
+                
+                updateStatus(`Switched to ${terrainProviders[type].name}`, 'success');
+            } catch (error) {
+                console.error('Error setting terrain:', error);
+                updateStatus(`Error: ${error.message}`, 'error');
+            }
+        }
+        
+        // Fly to location
+        function flyTo(lon, lat, height, name) {
+            viewer.camera.flyTo({
+                destination: Cesium.Cartesian3.fromDegrees(lon, lat, height),
+                orientation: {
+                    heading: Cesium.Math.toRadians(0),
+                    pitch: Cesium.Math.toRadians(-45),
+                    roll: 0.0
+                },
+                duration: 3,
+                complete: () => {
+                    updateStatus(`Viewing ${name} - Notice the terrain detail!`, 'success');
+                }
+            });
+        }
+        
+        // Update status message
+        function updateStatus(message, type = '') {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = message;
+            statusEl.className = 'status ' + type;
+            
+            if (type === 'success') {
+                setTimeout(() => {
+                    statusEl.className = 'status';
+                }, 3000);
+            }
+        }
+        
+        // Test local server on load
+        fetch('http://localhost:8082/tilesets/')
+            .then(response => {
+                if (response.ok) {
+                    document.getElementById('local-status').textContent = 'Available';
+                    document.getElementById('local-status').style.color = '#6f6';
+                }
+            })
+            .catch(error => {
+                document.getElementById('local-status').textContent = 'Not running';
+                document.getElementById('local-status').style.color = '#f66';
+            });
+        
+        // Set initial view
+        flyTo(-105.2928, 40.0150, 50000, 'Boulder, Colorado');
+        
+        // Add sample marker
+        viewer.entities.add({
+            position: Cesium.Cartesian3.fromDegrees(-105.2928, 40.0150, 2000),
+            point: {
+                pixelSize: 10,
+                color: Cesium.Color.YELLOW,
+                outlineColor: Cesium.Color.BLACK,
+                outlineWidth: 2
+            },
+            label: {
+                text: 'Sample Location\nElevation data visible',
+                font: '14pt sans-serif',
+                style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                outlineWidth: 2,
+                verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+                pixelOffset: new Cesium.Cartesian2(0, -20)
+            }
+        });
+    </script>
+</body>
+</html>
