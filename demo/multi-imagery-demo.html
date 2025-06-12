@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Global Health & BIM Dashboard - Multi-Provider Demo</title>
+    
+    <!-- Cesium -->
+    <script src="https://cesium.com/downloads/cesiumjs/releases/1.95/Build/Cesium/Cesium.js"></script>
+    <link href="https://cesium.com/downloads/cesiumjs/releases/1.95/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+    
+    <style>
+        html, body, #cesiumContainer {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+        
+        .info-panel {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(42, 42, 42, 0.9);
+            color: white;
+            padding: 15px;
+            border-radius: 5px;
+            max-width: 400px;
+            z-index: 100;
+        }
+        
+        .map-selector {
+            position: absolute;
+            top: 10px;
+            right: 50px;
+            background: rgba(42, 42, 42, 0.9);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 100;
+        }
+        
+        .map-selector select {
+            background: #333;
+            color: white;
+            border: 1px solid #555;
+            padding: 5px;
+            border-radius: 3px;
+            font-size: 14px;
+        }
+        
+        .api-key-notice {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(255, 200, 0, 0.9);
+            color: black;
+            padding: 10px;
+            border-radius: 5px;
+            max-width: 400px;
+            z-index: 100;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="cesiumContainer"></div>
+    
+    <div class="info-panel">
+        <h3>Global Health & BIM Dashboard</h3>
+        <p>Multiple imagery providers demo</p>
+    </div>
+    
+    <div class="map-selector">
+        <label>Map Type: </label>
+        <select id="imagerySelector" onchange="changeImagery()">
+            <option value="bing-aerial">Bing Aerial</option>
+            <option value="bing-aerial-labels">Bing Aerial with Labels</option>
+            <option value="bing-road">Bing Roads</option>
+            <option value="osm">OpenStreetMap</option>
+            <option value="esri-world">ESRI World Imagery</option>
+            <option value="esri-street">ESRI Street Map</option>
+            <option value="esri-natgeo">ESRI National Geographic</option>
+            <option value="stamen-watercolor">Stamen Watercolor</option>
+            <option value="stamen-toner">Stamen Toner</option>
+            <option value="natural-earth">Natural Earth II</option>
+        </select>
+    </div>
+    
+    <div class="api-key-notice" id="apiKeyNotice">
+        <strong>Note:</strong> <span id="apiKeyMessage"></span>
+    </div>
+    
+    <script>
+        // Configuration - Add your API keys here
+        const API_KEYS = {
+            BING_MAPS: 'YOUR_BING_MAPS_KEY', // Get from https://www.bingmapsportal.com/
+            MAPBOX: 'YOUR_MAPBOX_TOKEN',     // Get from https://www.mapbox.com/
+            CESIUM_ION: 'YOUR_ION_TOKEN'     // Get from https://cesium.com/ion/
+        };
+        
+        // Initialize viewer with terrain
+        const viewer = new Cesium.Viewer('cesiumContainer', {
+            terrainProvider: new Cesium.CesiumTerrainProvider({
+                url: 'http://localhost:8082/tilesets/sample/',
+                requestVertexNormals: true
+            }),
+            baseLayerPicker: false, // We'll use our custom selector
+            geocoder: true,
+            homeButton: true,
+            sceneModePicker: true,
+            navigationHelpButton: true,
+            animation: false,
+            timeline: false,
+            fullscreenButton: true
+        });
+        
+        // Enable lighting
+        viewer.scene.globe.enableLighting = true;
+        
+        // Imagery providers configuration
+        const imageryProviders = {
+            'bing-aerial': {
+                name: 'Bing Aerial',
+                create: () => new Cesium.BingMapsImageryProvider({
+                    url: 'https://dev.virtualearth.net',
+                    key: API_KEYS.BING_MAPS,
+                    mapStyle: Cesium.BingMapsStyle.AERIAL
+                }),
+                needsKey: true,
+                keyName: 'Bing Maps'
+            },
+            'bing-aerial-labels': {
+                name: 'Bing Aerial with Labels',
+                create: () => new Cesium.BingMapsImageryProvider({
+                    url: 'https://dev.virtualearth.net',
+                    key: API_KEYS.BING_MAPS,
+                    mapStyle: Cesium.BingMapsStyle.AERIAL_WITH_LABELS
+                }),
+                needsKey: true,
+                keyName: 'Bing Maps'
+            },
+            'bing-road': {
+                name: 'Bing Roads',
+                create: () => new Cesium.BingMapsImageryProvider({
+                    url: 'https://dev.virtualearth.net',
+                    key: API_KEYS.BING_MAPS,
+                    mapStyle: Cesium.BingMapsStyle.ROAD
+                }),
+                needsKey: true,
+                keyName: 'Bing Maps'
+            },
+            'osm': {
+                name: 'OpenStreetMap',
+                create: () => new Cesium.OpenStreetMapImageryProvider({
+                    url: 'https://a.tile.openstreetmap.org/'
+                }),
+                needsKey: false
+            },
+            'esri-world': {
+                name: 'ESRI World Imagery',
+                create: () => new Cesium.ArcGisMapServerImageryProvider({
+                    url: 'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer'
+                }),
+                needsKey: false
+            },
+            'esri-street': {
+                name: 'ESRI Street Map',
+                create: () => new Cesium.ArcGisMapServerImageryProvider({
+                    url: 'https://services.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer'
+                }),
+                needsKey: false
+            },
+            'esri-natgeo': {
+                name: 'ESRI National Geographic',
+                create: () => new Cesium.ArcGisMapServerImageryProvider({
+                    url: 'https://services.arcgisonline.com/ArcGIS/rest/services/NatGeo_World_Map/MapServer'
+                }),
+                needsKey: false
+            },
+            'stamen-watercolor': {
+                name: 'Stamen Watercolor',
+                create: () => new Cesium.UrlTemplateImageryProvider({
+                    url: 'https://stamen-tiles.a.ssl.fastly.net/watercolor/{z}/{x}/{y}.jpg',
+                    credit: 'Map tiles by Stamen Design, under CC BY 3.0. Data by OpenStreetMap, under CC BY SA.'
+                }),
+                needsKey: false
+            },
+            'stamen-toner': {
+                name: 'Stamen Toner',
+                create: () => new Cesium.UrlTemplateImageryProvider({
+                    url: 'https://stamen-tiles.a.ssl.fastly.net/toner/{z}/{x}/{y}.png',
+                    credit: 'Map tiles by Stamen Design, under CC BY 3.0. Data by OpenStreetMap, under CC BY SA.'
+                }),
+                needsKey: false
+            },
+            'natural-earth': {
+                name: 'Natural Earth II',
+                create: () => new Cesium.TileMapServiceImageryProvider({
+                    url: Cesium.buildModuleUrl('Assets/Textures/NaturalEarthII')
+                }),
+                needsKey: false
+            }
+        };
+        
+        // Function to change imagery
+        function changeImagery() {
+            const selector = document.getElementById('imagerySelector');
+            const selectedKey = selector.value;
+            const provider = imageryProviders[selectedKey];
+            
+            // Remove all existing imagery layers
+            viewer.imageryLayers.removeAll();
+            
+            // Check if API key is needed
+            if (provider.needsKey && API_KEYS.BING_MAPS === 'YOUR_BING_MAPS_KEY') {
+                // Show notice
+                const notice = document.getElementById('apiKeyNotice');
+                const message = document.getElementById('apiKeyMessage');
+                message.textContent = `${provider.keyName} API key needed. Get free key from ${
+                    provider.keyName === 'Bing Maps' ? 'https://www.bingmapsportal.com/' : 
+                    provider.keyName === 'Mapbox' ? 'https://www.mapbox.com/' : ''
+                }`;
+                notice.style.display = 'block';
+                
+                // Use fallback
+                viewer.imageryLayers.addImageryProvider(imageryProviders['osm'].create());
+            } else {
+                // Hide notice
+                document.getElementById('apiKeyNotice').style.display = 'none';
+                
+                // Add the selected imagery
+                try {
+                    viewer.imageryLayers.addImageryProvider(provider.create());
+                } catch (error) {
+                    console.error('Error loading imagery:', error);
+                    // Fallback to OSM
+                    viewer.imageryLayers.addImageryProvider(imageryProviders['osm'].create());
+                }
+            }
+        }
+        
+        // Set initial imagery
+        changeImagery();
+        
+        // Sample data visualization
+        viewer.entities.add({
+            position: Cesium.Cartesian3.fromDegrees(-74.0060, 40.7128, 100),
+            point: {
+                pixelSize: 15,
+                color: Cesium.Color.RED.withAlpha(0.8),
+                outlineColor: Cesium.Color.WHITE,
+                outlineWidth: 2
+            },
+            label: {
+                text: 'New York City\nHealth Monitoring Station',
+                font: '14pt sans-serif',
+                style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                outlineWidth: 2,
+                verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+                pixelOffset: new Cesium.Cartesian2(0, -20)
+            }
+        });
+        
+        // Set view
+        viewer.camera.setView({
+            destination: Cesium.Cartesian3.fromDegrees(-74.0, 40.7, 10000000),
+            orientation: {
+                heading: 0,
+                pitch: -Cesium.Math.PI_OVER_TWO,
+                roll: 0
+            }
+        });
+    </script>
+</body>
+</html>
