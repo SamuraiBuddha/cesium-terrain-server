@@ -36,7 +36,9 @@ RUN mkdir -p /app/cesium && \
         rm -rf /tmp/cesium.zip /tmp/Cesium-* ; \
     else \
         echo "Warning: Cesium ${CESIUM_VERSION} not found at legacy URL. Skipping Cesium download." && \
-        echo "You can mount Cesium files at runtime or update to use a newer version." ; \
+        echo "You can mount Cesium files at runtime or update to use a newer version." && \
+        echo "Creating empty cesium directory..." && \
+        touch /app/cesium/.placeholder ; \
     fi
 
 # --- Stage 2: Create the final runtime image ---
@@ -58,8 +60,8 @@ RUN mkdir -p /data/tilesets/terrain /data/cesium && chown -R cesium /data
 # Copy the compiled server binary from builder
 COPY --from=builder /app/bin/cesium-terrain-server /usr/local/bin/cesium-terrain-server
 
-# Copy Cesium assets from builder (if they exist)
-COPY --from=builder /app/cesium /data/cesium 2>/dev/null || true
+# Copy Cesium assets from builder (directory will exist even if empty)
+COPY --from=builder /app/cesium /data/cesium
 
 # Switch to non-root user
 USER cesium
