@@ -121,9 +121,15 @@
         <h3>Terrain Provider Comparison</h3>
         
         <div class="terrain-option" id="local-terrain" onclick="setTerrain('local')">
-            <h4>🖥️ Local Terrain Server</h4>
-            <p>Your terrain server running on port 8082</p>
+            <h4>🖥️ Local Terrain Server (8082)</h4>
+            <p>Original terrain server on port 8082</p>
             <p>Status: <span id="local-status">Checking...</span></p>
+        </div>
+        
+        <div class="terrain-option" id="local2-terrain" onclick="setTerrain('local2')">
+            <h4>🖥️ Local Terrain Server (8083)</h4>
+            <p>Global Health Model terrain on port 8083</p>
+            <p>Status: <span id="local2-status">Checking...</span></p>
         </div>
         
         <div class="terrain-option active" id="cesium-terrain" onclick="setTerrain('cesium')">
@@ -214,10 +220,19 @@
         // Terrain providers
         const terrainProviders = {
             local: {
-                name: 'Local Terrain Server',
+                name: 'Local Terrain Server (8082)',
                 create: () => {
                     return new Cesium.CesiumTerrainProvider({
-                        url: 'http://localhost:8082/tilesets/sample/',
+                        url: 'http://localhost:8082/tilesets/terrain',
+                        requestVertexNormals: true
+                    });
+                }
+            },
+            local2: {
+                name: 'Local Terrain Server (8083)',
+                create: () => {
+                    return new Cesium.CesiumTerrainProvider({
+                        url: 'http://localhost:8083/tilesets/terrain',
                         requestVertexNormals: true
                     });
                 }
@@ -252,27 +267,30 @@
                 const provider = terrainProviders[type].create();
                 viewer.terrainProvider = provider;
                 
-                // Add error handler
-                if (type === 'local') {
+                // Add error handler for local servers
+                if (type === 'local' || type === 'local2') {
+                    const port = type === 'local' ? '8082' : '8083';
+                    const statusId = type === 'local' ? 'local-status' : 'local2-status';
+                    
                     provider.errorEvent.addEventListener((error) => {
-                        console.error('Local terrain error:', error);
-                        updateStatus('Local terrain server not accessible. Is it running?', 'error');
-                        document.getElementById('local-status').textContent = 'Not available';
-                        document.getElementById('local-status').style.color = '#f66';
+                        console.error(`Local terrain error (${port}):`, error);
+                        updateStatus(`Local terrain server on ${port} not accessible. Is it running?`, 'error');
+                        document.getElementById(statusId).textContent = 'Not available';
+                        document.getElementById(statusId).style.color = '#f66';
                     });
                     
                     // Test local server
-                    fetch('http://localhost:8082/tilesets/')
+                    fetch(`http://localhost:${port}/tilesets/`)
                         .then(response => {
                             if (response.ok) {
-                                document.getElementById('local-status').textContent = 'Connected';
-                                document.getElementById('local-status').style.color = '#6f6';
-                                updateStatus('Connected to local terrain server', 'success');
+                                document.getElementById(statusId).textContent = 'Connected';
+                                document.getElementById(statusId).style.color = '#6f6';
+                                updateStatus(`Connected to local terrain server on port ${port}`, 'success');
                             }
                         })
                         .catch(error => {
-                            document.getElementById('local-status').textContent = 'Not available';
-                            document.getElementById('local-status').style.color = '#f66';
+                            document.getElementById(statusId).textContent = 'Not available';
+                            document.getElementById(statusId).style.color = '#f66';
                         });
                 }
                 
@@ -312,7 +330,8 @@
             }
         }
         
-        // Test local server on load
+        // Test local servers on load
+        // Test port 8082
         fetch('http://localhost:8082/tilesets/')
             .then(response => {
                 if (response.ok) {
@@ -323,6 +342,19 @@
             .catch(error => {
                 document.getElementById('local-status').textContent = 'Not running';
                 document.getElementById('local-status').style.color = '#f66';
+            });
+        
+        // Test port 8083
+        fetch('http://localhost:8083/tilesets/')
+            .then(response => {
+                if (response.ok) {
+                    document.getElementById('local2-status').textContent = 'Available';
+                    document.getElementById('local2-status').style.color = '#6f6';
+                }
+            })
+            .catch(error => {
+                document.getElementById('local2-status').textContent = 'Not running';
+                document.getElementById('local2-status').style.color = '#f66';
             });
         
         // Set initial view
