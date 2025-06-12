@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  cesium-terrain:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: cesium-terrain-server:modern
+    container_name: cesium-terrain-server
+    ports:
+      - "8080:8000"
+    volumes:
+      - ./terrain-tiles:/data/tilesets/terrain:ro
+      - ./cesium-assets:/data/cesium:ro
+    environment:
+      - LOG_LEVEL=notice
+    restart: unless-stopped
+    # Run as non-root user for security
+    user: cesium
+    
+  # Optional: Add memcached for caching
+  memcached:
+    image: memcached:1.6-alpine
+    container_name: cesium-memcached
+    ports:
+      - "11211:11211"
+    restart: unless-stopped
+    profiles:
+      - with-cache
+
+  # Optional: Add nginx for caching reverse proxy
+  nginx:
+    image: nginx:alpine
+    container_name: cesium-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - cesium-terrain
+      - memcached
+    restart: unless-stopped
+    profiles:
+      - with-cache
